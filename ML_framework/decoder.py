@@ -12,8 +12,8 @@ import keras.backend as K
 import timeit
 import numpy as np
 #################### LONG SHORT TERM MEMORY (LSTM) DECODER ##########################
-def Build_model(X_train,y_train,Topology): 
-    
+def Build_model(X_train,y_train,Topology):
+
         if Topology == 1:
             # Create Position  and Velocity estimator model
             #input
@@ -69,45 +69,17 @@ def Build_model(X_train,y_train,Topology):
             #maze
             Mazee=LSTM(4,return_sequences=True,name='MazeSeq')(In)
             Maze=TimeDistributed(Dense(2,activation='softmax'),name='Maze')(Mazee)
-            #Accelerate
-            Ae=LSTM(2,return_sequences=True,name='AcceSeq')(In)
-            A=TimeDistributed(Dense(2,activation='sigmoid'),name='ACC')(Ae)
             #velocity
-            M0=concatenate([A,In],name='ConcatFeature0')
-            Ve=LSTM(2,return_sequences=True,name='VelocitySeq')(M0)
+            Ve=LSTM(2,return_sequences=True,name='VelocitySeq')(In)
             V=TimeDistributed(Dense(2,activation='sigmoid'),name='Velocity')(Ve)
             #position
-            M=concatenate([Maze,In,Ve],name='ConcatFeature')
+            M=concatenate([Mazee,In,Ve],name='ConcatFeature')
             Pe=LSTM(2,return_sequences=True,name='P_Features')(M)
             P=TimeDistributed(Dense(2,activation='sigmoid'),name='P')(Pe)
             #build model
-            Model2=Model(inputs=In,outputs=[P,V,A,Maze])
+            Model2=Model(inputs=In,outputs=[P,V,Maze])
             #compile
-            Model2.compile(loss={'Velocity':'mse','P':'mse','ACC':'mse','Maze':'binary_crossentropy'},optimizer='rmsprop',metrics={'Maze':'accuracy'})
-
-        elif Topology==5:
-            # Create Position and Velocity estimator model
-            #input
-            In=Input(shape=(X_train.shape[1:]),name='Input')
-            #maze
-            Mazee=LSTM(4,return_sequences=True,name='MazeSeq')(In)
-            Maze=TimeDistributed(Dense(2,activation='softmax'),name='Maze')(Mazee)
-            #Accelerate
-            Ae=LSTM(2,return_sequences=True,name='AcceSeq')(In)
-            A=TimeDistributed(Dense(2,activation='sigmoid'),name='ACC')(Ae)
-            #velocity
-            M0=concatenate([A,In],name='ConcatFeature0')
-            Ve=LSTM(2,return_sequences=True,name='VelocitySeq')(M0)
-            V=TimeDistributed(Dense(2,activation='sigmoid'),name='Velocity')(Ve)
-            #position
-            M=concatenate([Maze,In,Ve],name='ConcatFeature')
-            Pe=LSTM(2,return_sequences=True,name='P_Features')(M)
-            P=TimeDistributed(Dense(2,activation='sigmoid'),name='P')(Pe)
-            #build model
-            Model2=Model(inputs=In,outputs=[P,V,A,Maze])
-            #compile
-            Model2.compile(loss={'Velocity':self.penalized_loss(A),'P':self.penalized_loss(V),'ACC':'mse','Maze':'binary_crossentropy'},optimizer='rmsprop',metrics={'Maze':'accuracy'})
-
+            Model2.compile(loss={'Velocity':'mse','P':self.penalized_loss(V),'Maze':'binary_crossentropy'},optimizer='rmsprop',metrics={'Maze':'accuracy'})
         else:
             print("No valid Topology")
         Model2.summary()
@@ -122,8 +94,8 @@ class Full_Model_LSTMDecoder(object):
     """
 
     def __init__(self,verbose=0,epochs=100,Topology=1,path='PositionEstimatorFull.h5'):
-        
-        
+
+
         self.verbose=verbose
         self.path=path
         self.epochs=epochs
@@ -134,12 +106,12 @@ class Full_Model_LSTMDecoder(object):
         def loss(y_true, y_pred):
             return K.mean(K.square(y_pred - y_true)*Pen1 , axis=-1)
         return loss
-    
+
     def create_model(self,X_train,y_train):
-        
+
         self.model=Build_model(X_train,y_train,self.topology)
     def fit(self,X_train,y_train,Arm_train,save=False,use_pretrained=False):
-        ## Fit the model    
+        ## Fit the model
         if self.topology == 1:
             if use_pretrained == True:
                 self.model.load_weights(self.path)
@@ -164,14 +136,7 @@ class Full_Model_LSTMDecoder(object):
         elif self.topology == 4:
             if use_pretrained == True:
                 self.model.load_weights(self.path)
-            Hist=self.model.fit(X_train,[y_train[:,:,:2],y_train[:,:,2:4],y_train[:,:,4:],Arm_train],shuffle=False,epochs=self.epochs,verbose=self.verbose,batch_size=1)
-            if save == True:
-                self.model.save_weights(self.path)
-            return Hist
-        elif self.topology == 5:
-            if use_pretrained == True:
-                self.model.load_weights(self.path)
-            Hist=self.model.fit(X_train,[y_train[:,:,:2],y_train[:,:,2:4],y_train[:,:,4:],Arm_train],shuffle=False,epochs=self.epochs,verbose=self.verbose,batch_size=1)
+            Hist=self.model.fit(X_train,[y_train[:,:,:2],y_train[:,:,2:4],Arm_train],shuffle=False,epochs=self.epochs,verbose=self.verbose,batch_size=1)
             if save == True:
                 self.model.save_weights(self.path)
             return Hist
@@ -180,12 +145,12 @@ class Full_Model_LSTMDecoder(object):
             self.model.load_weights(self.path)
         if save == True:
             self.model.save_weights(self.path)
-            
+
     def predict(self,X_test,y_test):
-        
+
         self.test_model=Build_model(X_train,y_train,self.topology)
-        
-        self.test_model.set_weights(self.model.get_weights()) 
+
+        self.test_model.set_weights(self.model.get_weights())
         if Topology ==1:
             y_predict=np.zeros((X_test.shape[1],4))
             [y_valid_predicted_lstm,VS]=Model2.predict(X_test)
@@ -211,18 +176,10 @@ class Full_Model_LSTMDecoder(object):
             print('test time=%f'% (stop - start) )
         elif Topology ==4:
             y_predict=np.zeros((X_test.shape[1],10))
-            [y_valid_predicted_lstm,VS,AS,Maze]=Model2.predict(X_test)
+            [y_valid_predicted_lstm,VS,Maze]=Model2.predict(X_test)
             y_predict[:,:2]=y_valid_predicted_lstm[0,:,:]
             y_predict[:,2:4]=Vs[0,:,:]
-            y_predict[:,4:6]=As[0,:,:]
             y_predict[:,6:]=Maze[0,:,:]
             stop = timeit.default_timer()
-        elif Topology ==5:
-            y_predict=np.zeros((X_test.shape[1],10))
-            [y_valid_predicted_lstm,VS,AS,Maze]=Model2.predict(X_test)
-            y_predict[:,:2]=y_valid_predicted_lstm[0,:,:]
-            y_predict[:,2:4]=Vs[0,:,:]
-            y_predict[:,4:6]=As[0,:,:]
-            y_predict[:,6:]=Maze[0,:,:]
-            stop = timeit.default_timer()
+            print('test time=%f'% (stop - start) )
         return [y_predict,Maze]
